@@ -1,0 +1,17 @@
+[project]
+name = "fastapi-template"
+version = "0.1.0"
+description = "fastapi-template"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.18.4",
+    "fastapi[standard-no-fastapi-cloud-cli]>=0.136.3",
+    "psycopg2-binary>=2.9.12",
+    "pydantic-settings>=2.14.1",
+    "pwdlib[argon2]>=0.3.0",
+    "pyjwt>=2.10.1",
+    "python-dotenv>=1.2.2",
+    "sqlalchemy>=2.0.50",
+    "ruff>=0.15.16",
+]
