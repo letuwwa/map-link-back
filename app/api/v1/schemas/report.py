@@ -22,3 +22,7 @@ class ReportRead(BaseModel):
     longitude: float
     created_at: datetime
     updated_at: datetime
+
+
+class DeleteReportRequest(BaseModel):
+    report_id: UUID
