@@ -29,6 +29,7 @@ __all__ = [
     "TokenPair",
     "UserRead",
     "UserRegister",
-    "DeleteReportRequestUserSettingRead",
+    "DeleteReportRequest",
+    "UserSettingRead",
     "UserSettingUpdate",
 ]

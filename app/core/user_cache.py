@@ -45,9 +45,22 @@ def cache_user_read(user: UserRead) -> None:
         redis_client.close()
 
 
+def try_cache_user_read(user: UserRead) -> None:
+    try:
+        cache_user_read(user)
+    except Exception:
+        return
+
+
 def cache_user(db: Session, user: User) -> UserRead:
     user_out = build_user_read(db, user)
     cache_user_read(user_out)
+    return user_out
+
+
+def try_cache_user(db: Session, user: User) -> UserRead:
+    user_out = build_user_read(db, user)
+    try_cache_user_read(user_out)
     return user_out
 
 

@@ -15,7 +15,7 @@ from fastapi import (
 from app.core import settings
 from app.db.session import SessionLocal
 from app.core.redis import create_redis_client
-from app.core.user_cache import cache_user, user_cache_key
+from app.core.user_cache import try_cache_user, user_cache_key
 from app.core.security import decode_token, get_token_user
 from app.api.v1.schemas import UserRead
 
@@ -39,7 +39,7 @@ def get_websocket_user(token: str | None) -> UserRead | None:
     try:
         payload = decode_token(token)
         user = get_token_user(db, payload, token_type="access")
-        return cache_user(db, user)
+        return try_cache_user(db, user)
     except HTTPException, ValueError:
         return None
     finally:
@@ -121,6 +121,7 @@ async def websocket_location_endpoint(
     except WebSocketDisconnect:
         return
     finally:
+        await redis_client.zrem(USERS_LOCATIONS_KEY, user_id)
         await redis_client.aclose()
 
 
@@ -155,14 +156,17 @@ async def _get_nearby_users(
     cached_users = await _get_cached_users(
         redis_client, [user["user_id"] for user in users]
     )
+    active_users = []
     for user in users:
         cached_user = cached_users.get(user["user_id"], {})
-        user["allow_incoming_messages"] = cached_user.get(
-            "allow_incoming_messages",
-            True,
-        )
+        if "allow_incoming_messages" not in cached_user:
+            await redis_client.zrem(USERS_LOCATIONS_KEY, user["user_id"])
+            continue
 
-    return users
+        user["allow_incoming_messages"] = cached_user["allow_incoming_messages"]
+        active_users.append(user)
+
+    return active_users
 
 
 async def _get_cached_users(
@@ -207,8 +211,19 @@ async def _get_nearby_reports(
         return []
 
     report_values = await redis_client.mget(raw_locations)
-    return [
-        json.loads(report_value)
-        for report_value in report_values
-        if report_value is not None
-    ]
+    reports = []
+    stale_report_keys = []
+    for report_key, report_value in zip(raw_locations, report_values, strict=True):
+        if report_value is None:
+            stale_report_keys.append(report_key)
+            continue
+
+        try:
+            reports.append(json.loads(report_value))
+        except json.JSONDecodeError:
+            stale_report_keys.append(report_key)
+
+    if stale_report_keys:
+        await redis_client.zrem(REPORTS_LOCATIONS_KEY, *stale_report_keys)
+
+    return reports

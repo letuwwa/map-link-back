@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, 
 from app.core import settings
 from app.db.deps import get_db
 from app.api.v1.schemas import UserRegister, UserRead
-from app.core.user_cache import cache_user
+from app.core.user_cache import try_cache_user
 from app.db.models import TokenBlocklist, User, UserRole, UserSetting
 from app.api.v1.schemas import AccessToken, AuthResponse, TokenPair
 from app.core.security import (
@@ -85,7 +85,7 @@ def register_user(
         ) from exc
 
     db.refresh(user)
-    user_out = cache_user(db, user)
+    user_out = try_cache_user(db, user)
     tokens = _create_token_pair(user)
     _set_auth_cookies(response, tokens)
     return {
@@ -105,7 +105,7 @@ def login_user(
         username=form_data.username,
         password=form_data.password,
     )
-    user_out = cache_user(db, user)
+    user_out = try_cache_user(db, user)
     tokens = _create_token_pair(user)
     _set_auth_cookies(response, tokens)
     return {
@@ -171,7 +171,7 @@ def read_current_user(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> UserRead:
-    return cache_user(db, current_user)
+    return try_cache_user(db, current_user)
 
 
 @router.get("/admin-only")
