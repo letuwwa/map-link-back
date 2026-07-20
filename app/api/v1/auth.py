@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, 
 from app.core import settings
 from app.db.deps import get_db
 from app.api.v1.schemas import UserRegister, UserRead
-from app.db.models import TokenBlocklist, User, UserRole
+from app.db.models import TokenBlocklist, User, UserRole, UserSetting
 from app.api.v1.schemas import AccessToken, AuthResponse, TokenPair
 from app.core.security import (
     decode_token,
@@ -73,6 +73,8 @@ def register_user(
 
     db.add(user)
     try:
+        db.flush()
+        db.add(UserSetting(user_id=user.id))
         db.commit()
     except IntegrityError as exc:
         db.rollback()

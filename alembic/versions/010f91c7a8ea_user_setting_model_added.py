@@ -1,8 +1,8 @@
 """user_setting_model_added
 
-Revision ID: f0728a9c33b8
+Revision ID: 010f91c7a8ea
 Revises: c6fd13d5b7a0
-Create Date: 2026-07-20 22:39:31.299254
+Create Date: 2026-07-20 22:44:53.908242
 
 """
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = "f0728a9c33b8"
+revision: str = "010f91c7a8ea"
 down_revision: Union[str, Sequence[str], None] = "c6fd13d5b7a0"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

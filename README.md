@@ -193,6 +193,22 @@ Send a message:
 {"body":"Are you near this report?"}
 ```
 
+## User Settings
+
+```text
+GET   /api/v1/users/settings       Read current user's settings
+PATCH /api/v1/users/settings       Update current user's settings
+```
+
+Update incoming messages:
+```json
+{"allow_incoming_messages":false}
+```
+
+When disabled, other users cannot create a new direct conversation with this
+user or send new direct messages to them. Existing conversations remain
+readable, and the user can still send outgoing messages.
+
 Newly registered users use the `regular` role. The base migration creates the
 users and token blocklist tables; it does not seed an admin user.
 

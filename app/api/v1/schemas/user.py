@@ -21,3 +21,13 @@ class UserRead(BaseModel):
     last_name: str
     role: UserRole
     is_active: bool
+
+
+class UserSettingRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    allow_incoming_messages: bool
+
+
+class UserSettingUpdate(BaseModel):
+    allow_incoming_messages: bool

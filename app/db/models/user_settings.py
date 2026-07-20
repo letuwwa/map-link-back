@@ -14,4 +14,7 @@ class UserSetting(BaseModel):
         nullable=False,
     )
 
-    allow_incoming_messages: Mapped[bool] = mapped_column(default=True)
+    allow_incoming_messages: Mapped[bool] = mapped_column(
+        default=True,
+        nullable=False,
+    )

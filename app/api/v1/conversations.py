@@ -11,6 +11,7 @@ from app.db.models import (
     Report,
     Message,
     Conversation,
+    UserSetting,
     ConversationType,
     ConversationMember,
 )
@@ -57,6 +58,8 @@ def create_direct_conversation(
         other_user_id=conversation_in.user_id,
     )
     if conversation is None:
+        _ensure_user_accepts_incoming_messages(db, conversation_in.user_id)
+
         conversation = Conversation(conversation_type=ConversationType.DIRECT)
         db.add(conversation)
         db.flush()
@@ -169,6 +172,13 @@ def create_message(
     db: Session = Depends(get_db),
 ) -> Message:
     conversation = _get_user_conversation(db, conversation_id, current_user.id)
+    if conversation.conversation_type == ConversationType.DIRECT:
+        _ensure_direct_recipients_accept_incoming_messages(
+            db=db,
+            conversation_id=conversation.id,
+            sender_id=current_user.id,
+        )
+
     message = Message(
         conversation_id=conversation.id,
         sender_id=current_user.id,
@@ -179,6 +189,31 @@ def create_message(
     db.commit()
     db.refresh(message)
     return message
+
+
+def _ensure_direct_recipients_accept_incoming_messages(
+    db: Session,
+    conversation_id: UUID,
+    sender_id: UUID,
+) -> None:
+    recipient_ids = db.scalars(
+        select(ConversationMember.user_id).where(
+            ConversationMember.conversation_id == conversation_id,
+            ConversationMember.user_id != sender_id,
+        )
+    ).all()
+
+    for recipient_id in recipient_ids:
+        _ensure_user_accepts_incoming_messages(db, recipient_id)
+
+
+def _ensure_user_accepts_incoming_messages(db: Session, user_id: UUID) -> None:
+    user_settings = db.scalar(select(UserSetting).where(UserSetting.user_id == user_id))
+    if user_settings is not None and not user_settings.allow_incoming_messages:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is not accepting incoming messages",
+        )
 
 
 @router.post("/{conversation_id}/read")
