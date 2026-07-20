@@ -150,6 +150,12 @@ Send the current user's location and receive nearby map data from Redis:
 WS /api/v1/location/ws
 ```
 
+Authentication uses the `access_token` cookie. For clients that cannot send the
+cookie during local development, pass the access token as a query parameter:
+```text
+WS /api/v1/location/ws?token=<access-token>
+```
+
 Payload:
 ```json
 {"lat":32.0853,"lng":34.7818}
@@ -163,6 +169,28 @@ Response:
   "users": [{"user_id": "...", "lat": 32.0854, "lng": 34.7819}],
   "reports": [{"id": "...", "report_type": "ROAD_DANGER", "latitude": 32.0853, "longitude": 34.7818}]
 }
+```
+
+## Conversation Endpoints
+
+```text
+POST /api/v1/conversations/direct                 Create or return a direct chat
+POST /api/v1/conversations/reports                Create a report discussion
+GET  /api/v1/conversations                        List my conversations
+GET  /api/v1/conversations/{id}                   Read one conversation
+GET  /api/v1/conversations/{id}/messages          List messages
+POST /api/v1/conversations/{id}/messages          Send a message
+POST /api/v1/conversations/{id}/read              Mark a message as read
+```
+
+Create a direct conversation:
+```json
+{"user_id":"..."}
+```
+
+Send a message:
+```json
+{"body":"Are you near this report?"}
 ```
 
 Newly registered users use the `regular` role. The base migration creates the
