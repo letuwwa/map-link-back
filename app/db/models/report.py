@@ -1,6 +1,6 @@
 import enum
 from uuid import UUID
-from sqlalchemy import Enum, Float, ForeignKey,Boolean
+from sqlalchemy import Enum, Float, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.models.base_model import BaseModel
@@ -40,4 +40,3 @@ class Report(BaseModel):
         Float,
         nullable=False,
     )
-    

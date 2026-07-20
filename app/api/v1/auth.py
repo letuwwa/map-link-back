@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, 
 from app.core import settings
 from app.db.deps import get_db
 from app.api.v1.schemas import UserRegister, UserRead
-from app.db.models import TokenBlocklist, User, UserRole
+from app.core.user_cache import try_cache_user
+from app.db.models import TokenBlocklist, User, UserRole, UserSetting
 from app.api.v1.schemas import AccessToken, AuthResponse, TokenPair
 from app.core.security import (
     decode_token,
@@ -47,7 +48,7 @@ def register_user(
     user_in: UserRegister,
     response: Response,
     db: Session = Depends(get_db),
-) -> dict[str, User | TokenPair]:
+) -> dict[str, UserRead | TokenPair]:
     existing_user = db.scalar(
         select(User).where(
             or_(
@@ -73,6 +74,8 @@ def register_user(
 
     db.add(user)
     try:
+        db.flush()
+        db.add(UserSetting(user_id=user.id))
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -82,10 +85,11 @@ def register_user(
         ) from exc
 
     db.refresh(user)
+    user_out = try_cache_user(db, user)
     tokens = _create_token_pair(user)
     _set_auth_cookies(response, tokens)
     return {
-        "user": user,
+        "user": user_out,
         "tokens": tokens,
     }
 
@@ -95,16 +99,17 @@ def login_user(
     response: Response,
     form_data: LoginForm = Depends(),
     db: Session = Depends(get_db),
-) -> dict[str, User | TokenPair]:
+) -> dict[str, UserRead | TokenPair]:
     user = _authenticate_user(
         db=db,
         username=form_data.username,
         password=form_data.password,
     )
+    user_out = try_cache_user(db, user)
     tokens = _create_token_pair(user)
     _set_auth_cookies(response, tokens)
     return {
-        "user": user,
+        "user": user_out,
         "tokens": tokens,
     }
 
@@ -164,8 +169,9 @@ def logout_user(
 @router.get("/me", response_model=UserRead)
 def read_current_user(
     current_user: User = Depends(get_current_user),
-) -> User:
-    return current_user
+    db: Session = Depends(get_db),
+) -> UserRead:
+    return try_cache_user(db, current_user)
 
 
 @router.get("/admin-only")
