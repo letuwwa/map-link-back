@@ -71,7 +71,9 @@ class ConversationMember(BaseModel):
 class Message(BaseModel):
     __tablename__ = "messages"
     __table_args__ = (
-        Index("ix_messages_conversation_id_created_at", "conversation_id", "created_at"),
+        Index(
+            "ix_messages_conversation_id_created_at", "conversation_id", "created_at"
+        ),
         Index("ix_messages_sender_id", "sender_id"),
     )
 
