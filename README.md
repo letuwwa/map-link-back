@@ -47,6 +47,10 @@ JWT_SECRET_KEY=<long-random-secret>
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=30
+ACCESS_TOKEN_COOKIE_NAME=access_token
+REFRESH_TOKEN_COOKIE_NAME=refresh_token
+AUTH_COOKIE_SECURE=false
+AUTH_COOKIE_SAMESITE=lax
 ```
 
 ## Database
@@ -115,6 +119,17 @@ Use token:
 curl http://localhost:8000/api/v1/auth/me \
   -H "Authorization: Bearer <jwt-token>"
 ```
+
+Browser auth:
+- `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, and
+  `POST /api/v1/auth/token` return tokens in JSON and also set HttpOnly
+  `access_token` and `refresh_token` cookies.
+- Authenticated endpoints accept either `Authorization: Bearer <token>` or the
+  `access_token` cookie.
+- `POST /api/v1/auth/refresh` accepts either a bearer refresh token or the
+  `refresh_token` cookie, then updates the `access_token` cookie.
+- `POST /api/v1/auth/logout` clears both auth cookies and revokes any valid
+  provided auth tokens.
 
 ## Auth Endpoints
 
