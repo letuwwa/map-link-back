@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 
 from app.db.deps import get_db
 from app.db.models import User, UserSetting
+from app.core.user_cache import cache_user
 from app.core.security import get_current_user
 from app.api.v1.schemas import UserSettingRead, UserSettingUpdate
 
@@ -29,6 +30,7 @@ def update_user_settings(
     user_settings.allow_incoming_messages = settings_in.allow_incoming_messages
     db.commit()
     db.refresh(user_settings)
+    cache_user(db, current_user)
     return user_settings
 
 

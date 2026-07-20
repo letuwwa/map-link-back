@@ -13,10 +13,11 @@ from fastapi import (
 )
 
 from app.core import settings
-from app.db.models import User
 from app.db.session import SessionLocal
 from app.core.redis import create_redis_client
+from app.core.user_cache import cache_user, user_cache_key
 from app.core.security import decode_token, get_token_user
+from app.api.v1.schemas import UserRead
 
 
 router = APIRouter(prefix="/location", tags=["location"])
@@ -30,14 +31,15 @@ class LocationMessage(BaseModel):
     lng: float = Field(ge=-180, le=180)
 
 
-def get_websocket_user(token: str | None) -> User | None:
+def get_websocket_user(token: str | None) -> UserRead | None:
     if token is None:
         return None
 
     db = SessionLocal()
     try:
         payload = decode_token(token)
-        return get_token_user(db, payload, token_type="access")
+        user = get_token_user(db, payload, token_type="access")
+        return cache_user(db, user)
     except HTTPException, ValueError:
         return None
     finally:
@@ -109,6 +111,7 @@ async def websocket_location_endpoint(
                         "user_id": user_id,
                         "lat": location.lat,
                         "lng": location.lng,
+                        "allow_incoming_messages": user.allow_incoming_messages,
                     },
                     "users": users,
                     "reports": reports,
@@ -149,7 +152,44 @@ async def _get_nearby_users(
             }
         )
 
+    cached_users = await _get_cached_users(
+        redis_client, [user["user_id"] for user in users]
+    )
+    for user in users:
+        cached_user = cached_users.get(user["user_id"], {})
+        user["allow_incoming_messages"] = cached_user.get(
+            "allow_incoming_messages",
+            True,
+        )
+
     return users
+
+
+async def _get_cached_users(
+    redis_client: Any,
+    user_ids: list[str],
+) -> dict[str, dict[str, Any]]:
+    if not user_ids:
+        return {}
+
+    raw_users = await redis_client.mget(
+        [user_cache_key(user_id) for user_id in user_ids]
+    )
+    cached_users = {}
+    for raw_user in raw_users:
+        if raw_user is None:
+            continue
+
+        try:
+            user = json.loads(raw_user)
+        except json.JSONDecodeError:
+            continue
+
+        cached_user_id = user.get("id")
+        if cached_user_id is not None:
+            cached_users[str(cached_user_id)] = user
+
+    return cached_users
 
 
 async def _get_nearby_reports(

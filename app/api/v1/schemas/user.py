@@ -21,6 +21,7 @@ class UserRead(BaseModel):
     last_name: str
     role: UserRole
     is_active: bool
+    allow_incoming_messages: bool
 
 
 class UserSettingRead(BaseModel):
