@@ -1,4 +1,5 @@
 from app.db.models.user import User, UserRole
+from app.db.models.user_settings import UserSetting
 from app.db.models.report import Report, ReportType
 from app.db.models.message import (
     Message,
@@ -21,4 +22,5 @@ __all__ = [
     "TokenBlocklist",
     "User",
     "UserRole",
+    "UserSetting",
 ]

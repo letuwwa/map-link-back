@@ -38,7 +38,7 @@ def get_websocket_user(token: str | None) -> User | None:
     try:
         payload = decode_token(token)
         return get_token_user(db, payload, token_type="access")
-    except (HTTPException, ValueError):
+    except HTTPException, ValueError:
         return None
     finally:
         db.close()
