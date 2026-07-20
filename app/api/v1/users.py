@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, ValidationError
 from fastapi import (
     status,
     Cookie,
+    Query,
     APIRouter,
     WebSocket,
     HTTPException,
@@ -37,7 +38,7 @@ def get_websocket_user(token: str | None) -> User | None:
     try:
         payload = decode_token(token)
         return get_token_user(db, payload, token_type="access")
-    except HTTPException, ValueError:
+    except (HTTPException, ValueError):
         return None
     finally:
         db.close()
@@ -50,9 +51,18 @@ async def websocket_location_endpoint(
         default=None,
         alias=settings.access_token_cookie_name,
     ),
+    token: str | None = Query(default=None),
 ) -> None:
-    user = get_websocket_user(access_token)
+    await websocket.accept()
+
+    user = get_websocket_user(access_token or token)
     if user is None:
+        await websocket.send_json(
+            {
+                "type": "auth_error",
+                "message": "Unauthorized",
+            }
+        )
         await websocket.close(
             code=status.WS_1008_POLICY_VIOLATION,
             reason="Unauthorized",
@@ -60,7 +70,6 @@ async def websocket_location_endpoint(
         return
 
     user_id = str(user.id)
-    await websocket.accept()
     redis_client = create_redis_client()
 
     try:
