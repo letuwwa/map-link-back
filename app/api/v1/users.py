@@ -212,4 +212,3 @@ async def _get_nearby_reports(
         for report_value in report_values
         if report_value is not None
     ]
-
