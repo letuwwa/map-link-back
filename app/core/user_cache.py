@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -7,6 +9,7 @@ from app.db.models import User, UserSetting
 
 
 USER_CACHE_TTL_SECONDS = 60 * 60
+logger = logging.getLogger(__name__)
 
 
 def get_user_settings_value(db: Session, user: User) -> bool:
@@ -49,6 +52,7 @@ def try_cache_user_read(user: UserRead) -> None:
     try:
         cache_user_read(user)
     except Exception:
+        logger.exception("Failed to cache user %s in Redis", user.id)
         return
 
 

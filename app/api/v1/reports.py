@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -11,6 +13,7 @@ from app.api.v1.schemas import ReportCreate, ReportRead, DeleteReportRequest
 router = APIRouter(prefix="/reports", tags=["reports"])
 REPORT_REDIS_TTL_SECONDS = 3 * 60 * 60
 REPORTS_LOCATIONS_KEY = "reports_locations"
+logger = logging.getLogger(__name__)
 
 
 @router.post("", response_model=ReportRead, status_code=status.HTTP_201_CREATED)
@@ -39,6 +42,7 @@ def _try_cache_report(report: ReportRead) -> None:
     try:
         _cache_report(report)
     except Exception:
+        logger.exception("Failed to cache report %s in Redis", report.id)
         return
 
 
@@ -95,6 +99,7 @@ def _try_delete_cached_report(report_id: object) -> None:
     try:
         _delete_cached_report(report_id)
     except Exception:
+        logger.exception("Failed to delete report %s from Redis", report_id)
         return
 
 
