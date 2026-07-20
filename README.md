@@ -7,7 +7,7 @@ protection.
 ## Requirements
 
 - Python 3.14+
-- PostgreSQL
+- Docker
 - uv
 
 ## Setup
@@ -39,6 +39,10 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=fastapi_template
 
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+
 JWT_SECRET_KEY=<long-random-secret>
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
@@ -47,7 +51,15 @@ REFRESH_TOKEN_EXPIRE_DAYS=30
 
 ## Database
 
-Create the database if needed:
+Start PostgreSQL and Redis:
+```bash
+docker compose up -d
+```
+
+PostgreSQL is exposed on `localhost:5432`; Redis is exposed on
+`localhost:6379`.
+
+Create the database if running PostgreSQL outside Docker:
 ```bash
 createdb fastapi_template
 ```
