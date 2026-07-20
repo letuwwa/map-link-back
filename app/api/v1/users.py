@@ -1,50 +1,165 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Cookie
-from redis.asyncio import Redis
-from app.core.security import decode_token, get_token_user
-from app.db.deps import SessionLocal
-from app.core.settings import settings
-router = APIRouter(prefix="/location", tags=["location"])
+import json
+from typing import Any
 
-def get_websocket_user(token: str):
-    """פונקציית האימות המצוינת שלך מהקוקיז (ללא שינוי)"""
-    if not token: return None
+from pydantic import BaseModel, Field, ValidationError
+from fastapi import (
+    status,
+    Cookie,
+    APIRouter,
+    WebSocket,
+    HTTPException,
+    WebSocketDisconnect,
+)
+
+from app.core import settings
+from app.db.models import User
+from app.db.session import SessionLocal
+from app.core.redis import create_redis_client
+from app.core.security import decode_token, get_token_user
+
+
+router = APIRouter(prefix="/location", tags=["location"])
+USERS_LOCATIONS_KEY = "users_locations"
+REPORTS_LOCATIONS_KEY = "reports_locations"
+NEARBY_RADIUS_KM = 5
+
+
+class LocationMessage(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+
+
+def get_websocket_user(token: str | None) -> User | None:
+    if token is None:
+        return None
+
+    db = SessionLocal()
     try:
         payload = decode_token(token)
-        db = SessionLocal()
-        user = get_token_user(db, payload, token_type="access")
+        return get_token_user(db, payload, token_type="access")
+    except HTTPException, ValueError:
+        return None
+    finally:
         db.close()
-        return user
-    except Exception: return None
 
 
 @router.websocket("/ws")
-async def websocket_location_endpoint(websocket: WebSocket, access_token: str = Cookie(None)):
+async def websocket_location_endpoint(
+    websocket: WebSocket,
+    access_token: str | None = Cookie(
+        default=None,
+        alias=settings.access_token_cookie_name,
+    ),
+) -> None:
     user = get_websocket_user(access_token)
     if user is None:
-        await websocket.close(code=4001, reason="Unauthorized")
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason="Unauthorized",
+        )
         return
 
     user_id = str(user.id)
     await websocket.accept()
-    print(f"User {user.username} started streaming location.")
+    redis_client = create_redis_client()
 
     try:
         while True:
             data = await websocket.receive_json()
-            
-            lat = data.get("lat") 
-            lng = data.get("lng")  
-            if lat is None or lng is None:
+
+            try:
+                location = LocationMessage.model_validate(data)
+            except ValidationError as exc:
+                await websocket.send_json(
+                    {
+                        "type": "validation_error",
+                        "errors": exc.errors(),
+                    }
+                )
                 continue
 
-           
             await redis_client.geoadd(
-                "users_locations", 
-                (float(lng), float(lat), user_id)
+                USERS_LOCATIONS_KEY,
+                (location.lng, location.lat, user_id),
             )
 
-            print(f"Updated location for User {user_id}: Lat {lat}, Lng {lng}")
+            users = await _get_nearby_users(
+                redis_client=redis_client,
+                user_id=user_id,
+                location=location,
+            )
+            reports = await _get_nearby_reports(
+                redis_client=redis_client,
+                location=location,
+            )
+
+            await websocket.send_json(
+                {
+                    "type": "nearby_map_data",
+                    "me": {
+                        "user_id": user_id,
+                        "lat": location.lat,
+                        "lng": location.lng,
+                    },
+                    "users": users,
+                    "reports": reports,
+                }
+            )
 
     except WebSocketDisconnect:
-        
-        print(f"User {user.username} stopped streaming.")
+        return
+    finally:
+        await redis_client.aclose()
+
+
+async def _get_nearby_users(
+    redis_client: Any,
+    user_id: str,
+    location: LocationMessage,
+) -> list[dict[str, Any]]:
+    raw_locations = await redis_client.georadius(
+        name=USERS_LOCATIONS_KEY,
+        longitude=location.lng,
+        latitude=location.lat,
+        radius=NEARBY_RADIUS_KM,
+        unit="km",
+        withcoord=True,
+    )
+
+    users = []
+    for member, coord in raw_locations:
+        other_user_id = str(member)
+        if other_user_id == user_id:
+            continue
+
+        users.append(
+            {
+                "user_id": other_user_id,
+                "lng": coord[0],
+                "lat": coord[1],
+            }
+        )
+
+    return users
+
+
+async def _get_nearby_reports(
+    redis_client: Any,
+    location: LocationMessage,
+) -> list[dict[str, Any]]:
+    raw_locations = await redis_client.georadius(
+        name=REPORTS_LOCATIONS_KEY,
+        longitude=location.lng,
+        latitude=location.lat,
+        radius=NEARBY_RADIUS_KM,
+        unit="km",
+    )
+    if not raw_locations:
+        return []
+
+    report_values = await redis_client.mget(raw_locations)
+    return [
+        json.loads(report_value)
+        for report_value in report_values
+        if report_value is not None
+    ]

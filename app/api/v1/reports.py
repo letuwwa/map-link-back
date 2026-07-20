@@ -10,6 +10,7 @@ from app.api.v1.schemas import ReportCreate, ReportRead
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 REPORT_REDIS_TTL_SECONDS = 3 * 60 * 60
+REPORTS_LOCATIONS_KEY = "reports_locations"
 
 
 @router.post("", response_model=ReportRead, status_code=status.HTTP_201_CREATED)
@@ -37,11 +38,17 @@ def create_report(
 def _cache_report(report: ReportRead) -> None:
     redis_client = create_sync_redis_client()
     try:
+        report_key = _report_cache_key(report.id)
         redis_client.set(
-            _report_cache_key(report.id),
+            report_key,
             report.model_dump_json(),
             ex=REPORT_REDIS_TTL_SECONDS,
         )
+        redis_client.geoadd(
+            REPORTS_LOCATIONS_KEY,
+            (report.longitude, report.latitude, report_key),
+        )
+        redis_client.expire(REPORTS_LOCATIONS_KEY, REPORT_REDIS_TTL_SECONDS)
     finally:
         redis_client.close()
 
