@@ -14,4 +14,5 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "sqlalchemy>=2.0.50",
     "ruff>=0.15.16",
+    "redis>=8.0.1",
 ]
