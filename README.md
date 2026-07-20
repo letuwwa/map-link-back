@@ -143,6 +143,28 @@ GET  /api/v1/auth/me            Return the current user
 GET  /api/v1/auth/admin-only    Require an admin user
 ```
 
+## Location WebSocket
+
+Send the current user's location and receive nearby map data from Redis:
+```text
+WS /api/v1/location/ws
+```
+
+Payload:
+```json
+{"lat":32.0853,"lng":34.7818}
+```
+
+Response:
+```json
+{
+  "type": "nearby_map_data",
+  "me": {"user_id": "...", "lat": 32.0853, "lng": 34.7818},
+  "users": [{"user_id": "...", "lat": 32.0854, "lng": 34.7819}],
+  "reports": [{"id": "...", "report_type": "ROAD_DANGER", "latitude": 32.0853, "longitude": 34.7818}]
+}
+```
+
 Newly registered users use the `regular` role. The base migration creates the
 users and token blocklist tables; it does not seed an admin user.
 
