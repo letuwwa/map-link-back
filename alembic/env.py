@@ -4,6 +4,7 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config
 
 from app.core import settings
+import app.db.models  # noqa: F401
 from app.db.models.base_model import BaseModel
 
 
