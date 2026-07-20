@@ -48,3 +48,6 @@ def _cache_report(report: ReportRead) -> None:
 
 def _report_cache_key(report_id: object) -> str:
     return f"reports:{report_id}"
+
+
+

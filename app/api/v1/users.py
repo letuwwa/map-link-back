@@ -3,10 +3,10 @@ from redis.asyncio import Redis
 from app.core.security import decode_token, get_token_user
 from app.db.deps import SessionLocal
 from app.core.settings import settings
+from app.core.redis import create_redis_client
 router = APIRouter(prefix="/location", tags=["location"])
 
 def get_websocket_user(token: str):
-    """פונקציית האימות המצוינת שלך מהקוקיז (ללא שינוי)"""
     if not token: return None
     try:
         payload = decode_token(token)
@@ -27,11 +27,12 @@ async def websocket_location_endpoint(websocket: WebSocket, access_token: str = 
     user_id = str(user.id)
     await websocket.accept()
     print(f"User {user.username} started streaming location.")
+    redis_client=create_redis_client()
 
     try:
         while True:
             data = await websocket.receive_json()
-            
+        
             lat = data.get("lat") 
             lng = data.get("lng")  
             if lat is None or lng is None:
@@ -43,8 +44,37 @@ async def websocket_location_endpoint(websocket: WebSocket, access_token: str = 
                 (float(lng), float(lat), user_id)
             )
 
-            print(f"Updated location for User {user_id}: Lat {lat}, Lng {lng}")
+            raw_locations = await redis_client.georadius(
+                name="users_locations",
+                longitude=float(lng),
+                latitude=float(lat),
+                radius=5,        
+                unit="km",       
+                withcoord=True   
+            )
+
+            all_users_list = []
+            for member, coord in raw_locations:
+                other_user_id = member
+                
+                if other_user_id == user_id:
+                    continue
+                    
+                all_users_list.append({
+                    "user_id": other_user_id,
+                    "lng": coord[0],  
+                    "lat": coord[1]   
+                })
+
+            await websocket.send_json({
+                "type": "nearby_locations",
+                "users": all_users_list
+            })
 
     except WebSocketDisconnect:
-        
         print(f"User {user.username} stopped streaming.")
+    
+    finally:
+        await redis_client.aclose()
+        print(f"Redis connection closed for user {user_id}")
+
