@@ -1,6 +1,6 @@
-from .user import UserRead, UserRegister, UserSettingRead, UserSettingUpdate
 from .token import AccessToken, AuthResponse, TokenPair
-from .report import ReportCreate, ReportRead
+from .report import ReportCreate, ReportRead, DeleteReportRequest
+from .user import UserRead, UserRegister, UserSettingRead, UserSettingUpdate
 from .conversation import (
     MessageRead,
     MessageCreate,
@@ -29,6 +29,7 @@ __all__ = [
     "TokenPair",
     "UserRead",
     "UserRegister",
+    "DeleteReportRequest"
     "UserSettingRead",
     "UserSettingUpdate",
 ]
