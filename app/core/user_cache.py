@@ -12,7 +12,7 @@ USER_CACHE_TTL_SECONDS = 60 * 60
 logger = logging.getLogger(__name__)
 
 
-def get_user_settings_value(db: Session, user: User) -> bool:
+def get_or_create_user_settings(db: Session, user: User) -> UserSetting:
     user_settings = db.scalar(select(UserSetting).where(UserSetting.user_id == user.id))
     if user_settings is None:
         user_settings = UserSetting(user_id=user.id)
@@ -20,10 +20,11 @@ def get_user_settings_value(db: Session, user: User) -> bool:
         db.commit()
         db.refresh(user_settings)
 
-    return user_settings.allow_incoming_messages
+    return user_settings
 
 
 def build_user_read(db: Session, user: User) -> UserRead:
+    user_settings = get_or_create_user_settings(db, user)
     return UserRead(
         id=user.id,
         email=user.email,
@@ -32,7 +33,8 @@ def build_user_read(db: Session, user: User) -> UserRead:
         last_name=user.last_name,
         role=user.role,
         is_active=user.is_active,
-        allow_incoming_messages=get_user_settings_value(db, user),
+        allow_incoming_messages=user_settings.allow_incoming_messages,
+        hide_me=user_settings.hide_me,
     )
 
 

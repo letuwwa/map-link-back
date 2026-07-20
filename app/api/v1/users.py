@@ -89,10 +89,13 @@ async def websocket_location_endpoint(
                 )
                 continue
 
-            await redis_client.geoadd(
-                USERS_LOCATIONS_KEY,
-                (location.lng, location.lat, user_id),
-            )
+            if user.hide_me:
+                await redis_client.zrem(USERS_LOCATIONS_KEY, user_id)
+            else:
+                await redis_client.geoadd(
+                    USERS_LOCATIONS_KEY,
+                    (location.lng, location.lat, user_id),
+                )
 
             users = await _get_nearby_users(
                 redis_client=redis_client,
@@ -112,6 +115,7 @@ async def websocket_location_endpoint(
                         "lat": location.lat,
                         "lng": location.lng,
                         "allow_incoming_messages": user.allow_incoming_messages,
+                        "hide_me": user.hide_me,
                     },
                     "users": users,
                     "reports": reports,
@@ -159,11 +163,16 @@ async def _get_nearby_users(
     active_users = []
     for user in users:
         cached_user = cached_users.get(user["user_id"], {})
-        if "allow_incoming_messages" not in cached_user:
+        if (
+            "allow_incoming_messages" not in cached_user
+            or "hide_me" not in cached_user
+            or cached_user["hide_me"]
+        ):
             await redis_client.zrem(USERS_LOCATIONS_KEY, user["user_id"])
             continue
 
         user["allow_incoming_messages"] = cached_user["allow_incoming_messages"]
+        user["hide_me"] = cached_user["hide_me"]
         active_users.append(user)
 
     return active_users

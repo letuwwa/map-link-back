@@ -27,7 +27,13 @@ def update_user_settings(
     db: Session = Depends(get_db),
 ) -> UserSetting:
     user_settings = _get_or_create_user_settings(db, current_user)
-    user_settings.allow_incoming_messages = settings_in.allow_incoming_messages
+
+    if settings_in.allow_incoming_messages is not None:
+        user_settings.allow_incoming_messages = settings_in.allow_incoming_messages
+
+    if settings_in.hide_me is not None:
+        user_settings.hide_me = settings_in.hide_me
+
     db.commit()
     db.refresh(user_settings)
     try_cache_user(db, current_user)
