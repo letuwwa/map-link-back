@@ -1,49 +1,87 @@
-# FastAPI Template
+# Map Link Backend
 
-FastAPI starter with PostgreSQL, SQLAlchemy, Alembic migrations, JWT auth,
-password hashing, refresh/logout token handling, and role-based admin
-protection.
+FastAPI backend for Map Link, a road reporting and live map application.
+
+The backend provides:
+- Cookie and bearer-token JWT authentication
+- PostgreSQL persistence with SQLAlchemy and Alembic
+- Redis-backed realtime map data
+- Road reports cached for map display
+- User privacy/message settings
+- Direct and report conversation APIs
+- Demo data seeding for presentations
 
 ## Requirements
 
 - Python 3.14+
-- Docker
-- uv
+- `uv`
+- Docker and Docker Compose
 
-## Setup
+## Quick Start
 
 Install dependencies:
+
 ```bash
 uv sync
 ```
 
-Create local env file:
+Create the local environment file:
+
 ```bash
 cp .env.example .env
 ```
 
-Generate a JWT secret and put it in `.env`:
+Start PostgreSQL and Redis:
+
 ```bash
-openssl rand -hex 32
+docker compose up -d
 ```
 
-Required env values:
+Run migrations:
+
+```bash
+uv run alembic upgrade head
+```
+
+Start the API:
+
+```bash
+uv run fastapi dev app/main.py
+```
+
+The API runs at:
+
+```text
+http://localhost:8000
+```
+
+Swagger docs:
+
+```text
+http://localhost:8000/docs
+```
+
+## Environment
+
+Main variables:
+
 ```env
-APP_NAME=fastapi-template
+APP_NAME=map-link
 ENVIRONMENT=development
-ALLOWED_ORIGINS=["http://localhost:3000","http://localhost:8000","http://127.0.0.1:3000","http://127.0.0.1:8000"]
+ALLOWED_ORIGINS=[]
+ALLOWED_ORIGIN_REGEX=.*
 
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
-POSTGRES_DB=fastapi_template
+POSTGRES_DB=map-link-db
 
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_DB=0
 
-JWT_SECRET_KEY=<long-random-secret>
+JWT_SECRET_KEY=change-me-generate-a-long-random-secret
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=30
@@ -53,41 +91,54 @@ AUTH_COOKIE_SECURE=false
 AUTH_COOKIE_SAMESITE=lax
 ```
 
+For local demos, `ALLOWED_ORIGIN_REGEX=.*` allows browser clients from any local IP/port. For production, replace this with a strict origin list.
+
+Generate a better JWT secret:
+
+```bash
+openssl rand -hex 32
+```
+
 ## Database
 
-Start PostgreSQL and Redis:
-```bash
-docker compose up -d
-```
-
-PostgreSQL is exposed on `localhost:5432`; Redis is exposed on
-`localhost:6379`.
-
-Create the database if running PostgreSQL outside Docker:
-```bash
-createdb fastapi_template
-```
-
-Run migrations:
-```bash
-uv run alembic upgrade head
-```
-
 Create a migration after model changes:
+
 ```bash
 uv run alembic revision --autogenerate -m "describe change"
 ```
 
-## Run
+Apply migrations:
 
 ```bash
-uv run fastapi dev app/main.py
+uv run alembic upgrade head
 ```
 
-The API is served at `http://localhost:8000`. Interactive docs are available at
-`http://localhost:8000/docs`.
+Show current migration:
 
-Register a user:
+```bash
+uv run alembic current
+```
+
+## Auth
+
+Auth supports both:
+- `Authorization: Bearer <token>`
+- HttpOnly cookies set by login/register
+
+Endpoints:
+
+```text
+POST /api/v1/auth/register
+POST /api/v1/auth/login
+POST /api/v1/auth/token
+POST /api/v1/auth/refresh
+POST /api/v1/auth/logout
+GET  /api/v1/auth/me
+GET  /api/v1/auth/admin-only
+```
+
+Register:
+
 ```bash
 curl -X POST http://localhost:8000/api/v1/auth/register \
   -H "Content-Type: application/json" \
@@ -100,145 +151,215 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
   }'
 ```
 
-Login with an email or username:
+Login:
+
 ```bash
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=user@example.com&password=password123456"
-```
-
-Swagger OAuth2 login endpoint:
-```bash
-curl -X POST http://localhost:8000/api/v1/auth/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=user@example.com&password=password123456"
-```
-
-Use token:
-```bash
-curl http://localhost:8000/api/v1/auth/me \
-  -H "Authorization: Bearer <jwt-token>"
-```
-
-Browser auth:
-- `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, and
-  `POST /api/v1/auth/token` return tokens in JSON and also set HttpOnly
-  `access_token` and `refresh_token` cookies.
-- Authenticated endpoints accept either `Authorization: Bearer <token>` or the
-  `access_token` cookie.
-- `POST /api/v1/auth/refresh` accepts either a bearer refresh token or the
-  `refresh_token` cookie, then updates the `access_token` cookie.
-- `POST /api/v1/auth/logout` clears both auth cookies and revokes any valid
-  provided auth tokens.
-
-## Auth Endpoints
-
-```text
-POST /api/v1/auth/register      Create a regular user and return token pair
-POST /api/v1/auth/login         Return the user and token pair
-POST /api/v1/auth/token         Return an OAuth2-compatible token pair
-POST /api/v1/auth/refresh       Return a new access token from a refresh token
-POST /api/v1/auth/logout        Revoke the presented access or refresh token
-GET  /api/v1/auth/me            Return the current user
-GET  /api/v1/auth/admin-only    Require an admin user
-```
-
-## Location WebSocket
-
-Send the current user's location and receive nearby map data from Redis:
-```text
-WS /api/v1/location/ws
-```
-
-Authentication uses the `access_token` cookie. For clients that cannot send the
-cookie during local development, pass the access token as a query parameter:
-```text
-WS /api/v1/location/ws?token=<access-token>
-```
-
-Payload:
-```json
-{"lat":32.0853,"lng":34.7818}
-```
-
-Response:
-```json
-{
-  "type": "nearby_map_data",
-  "me": {"user_id": "...", "lat": 32.0853, "lng": 34.7818},
-  "users": [{"user_id": "...", "lat": 32.0854, "lng": 34.7819}],
-  "reports": [{"id": "...", "report_type": "ROAD_DANGER", "latitude": 32.0853, "longitude": 34.7818}]
-}
-```
-
-## Conversation Endpoints
-
-```text
-POST /api/v1/conversations/direct                 Create or return a direct chat
-POST /api/v1/conversations/reports                Create a report discussion
-GET  /api/v1/conversations                        List my conversations
-GET  /api/v1/conversations/{id}                   Read one conversation
-GET  /api/v1/conversations/{id}/messages          List messages
-POST /api/v1/conversations/{id}/messages          Send a message
-POST /api/v1/conversations/{id}/read              Mark a message as read
-```
-
-Create a direct conversation:
-```json
-{"user_id":"..."}
-```
-
-Send a message:
-```json
-{"body":"Are you near this report?"}
+  -d "username=exampleuser&password=password123456"
 ```
 
 ## User Settings
 
+Endpoints:
+
 ```text
-GET   /api/v1/users/settings       Read current user's settings
-PATCH /api/v1/users/settings       Update current user's settings
+GET   /api/v1/users/settings
+PATCH /api/v1/users/settings
 ```
 
-Update incoming messages:
+Settings:
+- `allow_incoming_messages`: when false, other users cannot start/send direct messages to this user
+- `hide_me`: when true, this user is not shown in nearby map users
+
+Patch examples:
+
 ```json
-{"allow_incoming_messages":false}
+{"allow_incoming_messages": false}
 ```
 
-When disabled, other users cannot create a new direct conversation with this
-user or send new direct messages to them. Existing conversations remain
-readable, and the user can still send outgoing messages.
+```json
+{"hide_me": true}
+```
 
-Newly registered users use the `regular` role. The base migration creates the
-users and token blocklist tables; it does not seed an admin user.
+The current user response and Redis user cache include both settings.
 
-## Quality
+## Reports
 
-Run Ruff:
+Endpoints:
+
+```text
+POST /api/v1/reports
+POST /api/v1/reports/deleteReport
+```
+
+Create report:
+
+```json
+{
+  "report_type": "ROAD_DANGER",
+  "latitude": 32.0853,
+  "longitude": 34.7818
+}
+```
+
+Report types:
+
+```text
+POLICE
+FLOODING
+ROAD_DANGER
+TRAFFIC_JAM
+MISSING_SIGN
+CAR_ACCIDENT
+CONSTRUCTION
+SPEED_CAMERA
+```
+
+Reports are stored in PostgreSQL and cached in Redis for map websocket responses. Redis report cache lives for 3 hours.
+
+## Location WebSocket
+
+Endpoint:
+
+```text
+WS /api/v1/location/ws
+```
+
+Authentication:
+- Browser clients use the `access_token` cookie
+- Non-browser clients can pass `?token=<access-token>`
+
+Client sends:
+
+```json
+{"lat": 32.0853, "lng": 34.7818}
+```
+
+Server responds:
+
+```json
+{
+  "type": "nearby_map_data",
+  "me": {
+    "user_id": "...",
+    "lat": 32.0853,
+    "lng": 34.7818,
+    "allow_incoming_messages": true,
+    "hide_me": false
+  },
+  "users": [
+    {
+      "user_id": "...",
+      "lat": 32.0856,
+      "lng": 34.7821,
+      "allow_incoming_messages": false,
+      "hide_me": false
+    }
+  ],
+  "reports": [
+    {
+      "id": "...",
+      "user_id": "...",
+      "report_type": "TRAFFIC_JAM",
+      "latitude": 32.0856,
+      "longitude": 34.7821,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ]
+}
+```
+
+If `hide_me=true`, the user still receives map data but is removed from the shared user-location Redis set.
+
+## Conversations And Messages
+
+Endpoints:
+
+```text
+POST /api/v1/conversations/direct
+POST /api/v1/conversations/reports
+GET  /api/v1/conversations
+GET  /api/v1/conversations/{conversation_id}
+GET  /api/v1/conversations/{conversation_id}/messages
+POST /api/v1/conversations/{conversation_id}/messages
+POST /api/v1/conversations/{conversation_id}/read
+```
+
+Create direct conversation:
+
+```json
+{"user_id": "..."}
+```
+
+Send message:
+
+```json
+{"body": "Are you near this report?"}
+```
+
+Direct conversations respect the target user's `allow_incoming_messages` setting.
+
+## Demo Data
+
+Seed predictable users, settings, reports, conversations, messages, and Redis map data:
+
+```bash
+uv run python scripts/seed_demo.py
+```
+
+Demo accounts:
+
+```text
+driver1 / password123456
+driver2 / password123456
+reporter / password123456
+no_messages_user / password123456
+hidden_user / password123456
+```
+
+Suggested geolocation overrides:
+
+```text
+driver1: 32.08530, 34.78180
+driver2: 32.08565, 34.78210
+reporter: 32.08495, 34.78145
+no_messages_user: 32.08545, 34.78155
+hidden_user: 32.08575, 34.78235
+```
+
+Use Chrome DevTools -> More tools -> Sensors -> Location to set one of these coordinates.
+
+## Quality Checks
+
+Run lint:
+
 ```bash
 uv run ruff check .
 ```
 
-## Key Files
+Import check:
 
-```text
-app/main.py                       FastAPI app
-app/api/v1/auth.py                Auth routes
-app/core/security.py              Password hashing and JWT logic
-app/core/settings.py              Env settings
-app/db/models/user.py             User model and roles
-app/db/models/token_blocklist.py  Revoked token model
-alembic/versions/                 DB migrations
+```bash
+uv run python -c "from app.main import app; print('import ok')"
 ```
 
-## Status
+## Project Structure
 
-Done:
-- Clean project structure
-- Env variables support
-- DB base model and migrations setup
-- JWT auth with refresh/logout and role-based admin protection
-
-To do:
-- Docker pre-settings
-- Docs
+```text
+app/main.py                 FastAPI app and CORS
+app/api/router.py           API router registration
+app/api/v1/auth.py          Auth routes
+app/api/v1/users.py         Location websocket
+app/api/v1/reports.py       Report routes and Redis report cache
+app/api/v1/user_settings.py User settings routes
+app/api/v1/conversations.py Conversation/message routes
+app/core/settings.py        Environment settings
+app/core/security.py        JWT and password logic
+app/core/redis.py           Redis clients
+app/core/user_cache.py      Redis user cache
+app/db/models/              SQLAlchemy models
+alembic/versions/           Database migrations
+scripts/seed_demo.py        Demo data seeder
+```
