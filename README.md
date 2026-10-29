@@ -68,8 +68,7 @@ Main variables:
 ```env
 APP_NAME=map-link
 ENVIRONMENT=development
-ALLOWED_ORIGINS=[]
-ALLOWED_ORIGIN_REGEX=.*
+ALLOWED_ORIGINS=["http://localhost:5173","http://localhost:8000"]
 
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
@@ -91,7 +90,7 @@ AUTH_COOKIE_SECURE=false
 AUTH_COOKIE_SAMESITE=lax
 ```
 
-For local demos, `ALLOWED_ORIGIN_REGEX=.*` allows browser clients from any local IP/port. For production, replace this with a strict origin list.
+Set `ALLOWED_ORIGINS` to the exact frontend origins, including scheme and port. This list controls HTTP CORS and browser WebSocket handshakes. Add the relevant LAN origin for local demos. `ALLOWED_ORIGIN_REGEX` is not a supported setting.
 
 Generate a better JWT secret:
 
@@ -230,6 +229,10 @@ Authentication:
 - Browser clients use the `access_token` cookie
 - Non-browser clients can pass `?token=<access-token>`
 
+Authentication and privacy settings are checked again on each valid location update. Expired or revoked credentials close the connection with code 1008. Browser connections must use an origin listed in `ALLOWED_ORIGINS`; clients without an Origin header remain supported.
+
+WebSocket latitude must be between -85.05112878 and 85.05112878 degrees, the Redis GEO indexing range. Longitude must be between -180 and 180. Malformed JSON and invalid coordinates return `validation_error` and leave the connection open.
+
 Client sends:
 
 ```json
@@ -333,10 +336,20 @@ Use Chrome DevTools -> More tools -> Sensors -> Location to set one of these coo
 
 ## Quality Checks
 
+Install the development dependencies and run the complete deterministic test suite:
+
+```bash
+uv sync --group dev
+uv run pytest
+```
+
+Tests use an isolated in-memory SQLite database with foreign keys enabled and mocked Redis clients. No `.env`, PostgreSQL, Redis, or Docker instance is required. The default command measures all application and demo-seeder Python code with `pytest-cov` and enforces at least 85% line coverage. It does not verify PostgreSQL-specific migrations or real Redis GEO commands.
+
 Run lint:
 
 ```bash
 uv run ruff check .
+uv run ruff format --check .
 ```
 
 Import check:
@@ -362,4 +375,6 @@ app/core/user_cache.py      Redis user cache
 app/db/models/              SQLAlchemy models
 alembic/versions/           Database migrations
 scripts/seed_demo.py        Demo data seeder
+tests/                      Isolated API, database, WebSocket, and regression tests
+AUDIT_REPORT.md             Findings, validation results, and remaining limitations
 ```
