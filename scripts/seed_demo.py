@@ -239,6 +239,7 @@ def seed_conversations(db: Session, users: dict[str, User]) -> None:
 
         conversation.updated_at = datetime.now(timezone.utc)
         if last_message is not None:
+            db.flush()
             members[0].last_read_message_id = last_message.id
 
     db.flush()
