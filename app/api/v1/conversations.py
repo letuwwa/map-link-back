@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.db.deps import get_db
 from app.db.models import (
@@ -143,8 +143,8 @@ def read_conversation(
 @router.get("/{conversation_id}/messages", response_model=list[MessageRead])
 def list_messages(
     conversation_id: UUID,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(default=50, ge=1),
+    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[Message]:
