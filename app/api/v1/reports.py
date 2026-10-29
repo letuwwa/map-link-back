@@ -1,4 +1,5 @@
 import logging
+from redis.exceptions import RedisError
 
 from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -41,7 +42,7 @@ def create_report(
 def _try_cache_report(report: ReportRead) -> None:
     try:
         _cache_report(report)
-    except Exception:
+    except RedisError:
         logger.exception("Failed to cache report %s in Redis", report.id)
         return
 
@@ -98,7 +99,7 @@ def delete_report(
 def _try_delete_cached_report(report_id: object) -> None:
     try:
         _delete_cached_report(report_id)
-    except Exception:
+    except RedisError:
         logger.exception("Failed to delete report %s from Redis", report_id)
         return
 

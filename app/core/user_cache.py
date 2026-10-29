@@ -1,6 +1,8 @@
 import logging
+from redis.exceptions import RedisError
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.v1.schemas import UserRead
@@ -16,7 +18,18 @@ def get_or_create_user_settings(db: Session, user: User) -> UserSetting:
     user_settings = db.scalar(select(UserSetting).where(UserSetting.user_id == user.id))
     if user_settings is None:
         user_settings = UserSetting(user_id=user.id)
-        db.add(user_settings)
+        try:
+            with db.begin_nested():
+                db.add(user_settings)
+                db.flush()
+        except IntegrityError:
+            # Another request may have created the missing row after our lookup.
+            existing = db.scalar(
+                select(UserSetting).where(UserSetting.user_id == user.id)
+            )
+            if existing is None:
+                raise
+            return existing
         db.commit()
         db.refresh(user_settings)
 
@@ -53,7 +66,7 @@ def cache_user_read(user: UserRead) -> None:
 def try_cache_user_read(user: UserRead) -> None:
     try:
         cache_user_read(user)
-    except Exception:
+    except RedisError:
         logger.exception("Failed to cache user %s in Redis", user.id)
         return
 
