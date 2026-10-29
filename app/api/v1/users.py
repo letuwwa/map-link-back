@@ -2,6 +2,7 @@ import json
 from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
+from starlette.concurrency import run_in_threadpool
 from fastapi import (
     status,
     Cookie,
@@ -27,7 +28,8 @@ NEARBY_RADIUS_KM = 5
 
 
 class LocationMessage(BaseModel):
-    lat: float = Field(ge=-90, le=90)
+    # Redis GEO uses Web Mercator and cannot index the poles.
+    lat: float = Field(ge=-85.05112878, le=85.05112878)
     lng: float = Field(ge=-180, le=180)
 
 
@@ -55,9 +57,16 @@ async def websocket_location_endpoint(
     ),
     token: str | None = Query(default=None),
 ) -> None:
+    origin = websocket.headers.get("origin")
+    if origin is not None and origin not in settings.allowed_origins:
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION, reason="Origin not allowed"
+        )
+        return
     await websocket.accept()
 
-    user = get_websocket_user(access_token or token)
+    auth_token = access_token or token
+    user = await run_in_threadpool(get_websocket_user, auth_token)
     if user is None:
         await websocket.send_json(
             {
@@ -76,7 +85,13 @@ async def websocket_location_endpoint(
 
     try:
         while True:
-            data = await websocket.receive_json()
+            try:
+                data = await websocket.receive_json()
+            except json.JSONDecodeError:
+                await websocket.send_json(
+                    {"type": "validation_error", "errors": [{"msg": "Invalid JSON"}]}
+                )
+                continue
 
             try:
                 location = LocationMessage.model_validate(data)
@@ -84,10 +99,21 @@ async def websocket_location_endpoint(
                 await websocket.send_json(
                     {
                         "type": "validation_error",
-                        "errors": exc.errors(),
+                        "errors": exc.errors(include_context=False),
                     }
                 )
                 continue
+
+            # Revalidate authentication and privacy for long-lived connections.
+            user = await run_in_threadpool(get_websocket_user, auth_token)
+            if user is None:
+                await websocket.send_json(
+                    {"type": "auth_error", "message": "Unauthorized"}
+                )
+                await websocket.close(
+                    code=status.WS_1008_POLICY_VIOLATION, reason="Unauthorized"
+                )
+                return
 
             if user.hide_me:
                 await redis_client.zrem(USERS_LOCATIONS_KEY, user_id)
@@ -125,8 +151,10 @@ async def websocket_location_endpoint(
     except WebSocketDisconnect:
         return
     finally:
-        await redis_client.zrem(USERS_LOCATIONS_KEY, user_id)
-        await redis_client.aclose()
+        try:
+            await redis_client.zrem(USERS_LOCATIONS_KEY, user_id)
+        finally:
+            await redis_client.aclose()
 
 
 async def _get_nearby_users(
@@ -198,6 +226,8 @@ async def _get_cached_users(
         except json.JSONDecodeError:
             continue
 
+        if not isinstance(user, dict):
+            continue
         cached_user_id = user.get("id")
         if cached_user_id is not None:
             cached_users[str(cached_user_id)] = user
@@ -228,7 +258,11 @@ async def _get_nearby_reports(
             continue
 
         try:
-            reports.append(json.loads(report_value))
+            report = json.loads(report_value)
+            if isinstance(report, dict):
+                reports.append(report)
+            else:
+                stale_report_keys.append(report_key)
         except json.JSONDecodeError:
             stale_report_keys.append(report_key)
 
