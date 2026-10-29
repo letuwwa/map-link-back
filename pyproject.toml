@@ -16,3 +16,17 @@ dependencies = [
     "ruff>=0.15.16",
     "redis>=8.0.1",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4",
+    "pytest-cov>=6.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--cov=app --cov=scripts --cov-report=term-missing --cov-fail-under=85"
+
+[tool.ruff]
+target-version = "py314"
