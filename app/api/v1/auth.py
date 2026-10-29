@@ -154,10 +154,7 @@ def logout_user(
     for token in _get_logout_tokens(request, bearer_token):
         revoked_tokens += _add_token_to_blocklist(db, token)
 
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
+    db.commit()
 
     _clear_auth_cookies(response)
     return {
@@ -262,7 +259,18 @@ def _add_token_to_blocklist(db: Session, token: str) -> int:
         user_id=str(user.id),
         expires_at=expires_at,
     )
-    db.add(revoked_token)
+    try:
+        # A concurrent logout can revoke this JTI after the check above.
+        # Isolate that collision so other tokens still get revoked.
+        with db.begin_nested():
+            db.add(revoked_token)
+            db.flush()
+    except IntegrityError:
+        if not db.scalar(
+            select(TokenBlocklist.id).where(TokenBlocklist.jti == payload["jti"])
+        ):
+            raise
+        return 0
     return 1
 
 

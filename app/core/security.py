@@ -48,6 +48,7 @@ def decode_token(token: str) -> dict[str, Any]:
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            options={"require": ["sub", "jti", "type", "exp"]},
         )
     except jwt.InvalidTokenError as exc:
         raise _credentials_exception() from exc
@@ -62,7 +63,12 @@ def get_token_user(db: Session, payload: dict[str, Any], token_type: str) -> Use
     subject = payload.get("sub")
     jti = payload.get("jti")
     payload_token_type = payload.get("type")
-    if subject is None or jti is None or payload_token_type != token_type:
+    if (
+        not isinstance(subject, str)
+        or not isinstance(jti, str)
+        or not jti
+        or payload_token_type != token_type
+    ):
         raise _credentials_exception()
 
     if is_token_revoked(db, jti):
